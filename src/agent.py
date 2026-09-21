@@ -15,14 +15,14 @@ class Agent:
         self.max_steps = max_steps
         self.messages: list[dict] = []
 
-    def run(self, task: str) -> dict:
+    async def run(self, task: str) -> dict:
         """运行独立任务；停止原因不代表任务通过验证。"""
         self.messages = [
             {
                 "role": "system",
                 "content": (
                     "You are TraceForge, a coding agent. "
-                    "Available tools: list_files and read_file. "
+                    "Available tools: list_files, read_file, write_file, and run_command. "
                     "Use tool results as evidence. "
                     "When finished, answer without tool calls."
                 ),
@@ -33,7 +33,7 @@ class Agent:
 
         # max_steps 限制模型调用次数，不是工具调用次数。
         for step in range(1, self.max_steps + 1):
-            response = call_model(self.model, self.messages)
+            response = await call_model(self.model, self.messages)
             tool_calls = response["tool_calls"]
 
             # 格式已由模型边界检查；循环只检查运行内的 ID 唯一性。

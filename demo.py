@@ -1,3 +1,4 @@
+import asyncio
 import json
 from pathlib import Path
 from tempfile import TemporaryDirectory
@@ -5,7 +6,7 @@ from tempfile import TemporaryDirectory
 from src.agent import Agent
 
 
-def mock_model(messages: list[dict]) -> dict:
+async def mock_model(messages: list[dict]) -> dict:
     """根据工具观察依次执行：列文件、读文件、回答。"""
     observations = [message for message in messages if message["role"] == "tool"]
     if not observations:
@@ -32,14 +33,14 @@ def mock_model(messages: list[dict]) -> dict:
     return {"content": f"hello.py 的内容是：\n{last['content']}", "tool_calls": []}
 
 
-def main() -> None:
+async def main() -> None:
     with TemporaryDirectory() as directory:
         workspace = Path(directory)
         (workspace / "hello.py").write_text(
             "print('Hello, TraceForge!')\n", encoding="utf-8"
         )
         agent = Agent(workspace, mock_model)
-        result = agent.run("读取 hello.py，告诉我它的内容。")
+        result = await agent.run("读取 hello.py，告诉我它的内容。")
         print("运行结果：")
         print(json.dumps(result, ensure_ascii=False, indent=2))
         print("\n交互轨迹：")
@@ -47,4 +48,4 @@ def main() -> None:
 
 
 if __name__ == "__main__":
-    main()
+    asyncio.run(main())

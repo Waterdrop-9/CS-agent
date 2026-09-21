@@ -1,13 +1,13 @@
-from collections.abc import Callable
+from collections.abc import Callable, Awaitable
 
 
 # 模型函数只读取 messages，返回新响应，不修改历史或已返回的对象。
-ModelFunction = Callable[[list[dict]], dict]
+ModelFunction = Callable[[list[dict]], Awaitable[dict]]
 
 
-def call_model(model: ModelFunction, messages: list[dict]) -> dict:
+async def call_model(model: ModelFunction, messages: list[dict]) -> dict:
     """在模型边界检查响应结构；工具参数是否合法由工具层负责。"""
-    response = model(messages)
+    response = await model(messages)
     if not isinstance(response, dict):
         raise ValueError("模型响应必须是字典")
 
@@ -23,4 +23,12 @@ def call_model(model: ModelFunction, messages: list[dict]) -> dict:
         ):
             raise ValueError("工具调用需要非空字符串 id 和 name")
 
-    return {"content": content, "tool_calls": tool_calls}
+    result = {
+        "content": content,
+        "tool_calls": tool_calls,
+    }
+
+    if response.get("reasoning_content") is not None:
+        result["reasoning_content"] = response["reasoning_content"]
+
+    return result

@@ -1,4 +1,67 @@
 from pathlib import Path
+import subprocess
+
+TOOL_DEFINITIONS = [
+    {
+        "name": "list_files",
+        "description": "List files and directories at the workspace root.",
+        "input_schema": {
+            "type": "object",
+            "properties": {},
+            "additionalProperties": False,
+        },
+    },
+    {
+        "name": "read_file",
+        "description": "Read a UTF-8 text file inside the workspace.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "file_path": {
+                    "type": "string",
+                    "description": "File path relative to the workspace.",
+                },
+            },
+            "required": ["file_path"],
+            "additionalProperties": False,
+        },
+    },
+    {
+        "name": "write_file",
+        "description": "Write UTF-8 text to a file inside the workspace.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "file_path": {
+                    "type": "string",
+                    "description": "File path relative to the workspace.",
+                },
+                "content": {
+                    "type": "string",
+                    "description": "Complete new content of the file.",
+                },
+            },
+            "required": ["file_path", "content"],
+            "additionalProperties": False,
+        },
+    },
+    {
+        "name": "run_command",
+        "description": "Run a shell command in the workspace directory.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "command": {
+                    "type": "string",
+                    "description": "Shell command to run in the workspace.",
+                },
+            },
+            "required": ["command"],
+            "additionalProperties": False,
+        },
+    },
+]
+
 
 def resolve_path(workspace: Path, file_path: str) -> Path:
     """ 将相对路径解析为workspace下的绝对路径 """
@@ -56,6 +119,15 @@ def execute_tools(workspace: Path, call: dict) -> dict:
             content = list_files(workspace)
         elif tool_name == "read_file":
             content = read_file(workspace, args.get("file_path", ""))
+        elif tool_name == "write_file":
+            content = write_file(workspace, args.get("file_path", ""), args.get("content", ""))
+        elif tool_name == "run_command":
+            ok, content = run_command(workspace, args.get("command", ""))
+            return {
+                "tool_call_id": tool_call_id,
+                "ok": ok,
+                "content": content,
+            }
         else:
             raise ValueError(f"Unknown tool name: {tool_name}")
 
@@ -71,3 +143,36 @@ def execute_tools(workspace: Path, call: dict) -> dict:
         "ok": True,
         "content": content,
     }
+
+def write_file(workspace: Path, file_path: str, content: str) -> str:
+    """写入工作区下的 UTF-8 文本文件。"""
+    if not isinstance(content, str):
+        raise ValueError("content must be a string")
+
+    target = resolve_path(workspace, file_path)
+    target.write_text(content, encoding="utf-8")
+    return f"Wrote {len(content)} characters to {file_path}"
+
+
+def run_command(workspace: Path, command: str) -> tuple[bool, str]:
+    """在 workspace 中执行命令，并返回是否成功及可读结果。"""
+    if not isinstance(command, str) or not command.strip():
+        raise ValueError("command must be a non-empty string")
+
+    try:
+        completed = subprocess.run(
+            command,
+            shell=True,
+            cwd=workspace,
+            capture_output=True,
+            text=True,
+            timeout=30,
+        )
+    except subprocess.TimeoutExpired as error:
+        output = (error.stdout or "") + (error.stderr or "")
+        return False, f"command timed out after 30 seconds\n{output}"
+
+    output = (completed.stdout or "") + (completed.stderr or "")
+    return completed.returncode == 0, (
+        f"exit_code={completed.returncode}\n{output}"
+    )
